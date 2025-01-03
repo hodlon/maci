@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { Command } from "@commander-js/extra-typings";
+import { generateTallyCommitments, getPollParams, verify } from "maci-sdk";
 
 import fs from "fs";
 import path from "path";
@@ -22,7 +23,6 @@ import {
   timeTravel,
   signup,
   isRegisteredUser,
-  verify,
   genProofs,
   fundWallet,
   proveOnChain,
@@ -32,7 +32,7 @@ import {
   joinPoll,
   isJoinedUser,
 } from "./commands";
-import { TallyData, logError, promptSensitiveValue, readContractAddress } from "./utils";
+import { TallyData, banner, logError, promptSensitiveValue, readContractAddress } from "./utils";
 
 // set the description version and name of the cli tool
 const { description, version, name } = JSON.parse(
@@ -583,6 +583,7 @@ program
   .option("-r, --rpc-provider <provider>", "the rpc provider URL")
   .action(async (cmdObj) => {
     try {
+      banner(cmdObj.quiet);
       const signer = await getSigner();
       const network = await signer.provider?.getNetwork();
 
@@ -596,12 +597,20 @@ program
 
       const maciAddress = tallyData.maci || cmdObj.maciAddress || (await readContractAddress("MACI", network?.name));
 
+      const pollParams = await getPollParams({ pollId: cmdObj.pollId, maciContractAddress: maciAddress, signer });
+      const tallyCommitments = await generateTallyCommitments({
+        tallyData,
+        voteOptionTreeDepth: pollParams.voteOptionTreeDepth,
+      });
+
       await verify({
         tallyData,
         pollId: cmdObj.pollId,
         maciAddress,
-        quiet: cmdObj.quiet,
         signer,
+        tallyCommitments,
+        numVoteOptions: pollParams.numVoteOptions,
+        voteOptionTreeDepth: pollParams.voteOptionTreeDepth,
       });
     } catch (error) {
       program.error((error as Error).message, { exitCode: 1 });
